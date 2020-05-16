@@ -1,0 +1,40 @@
+---
+# defaults file for haproxy-sticky-load-balancer
+
+# frontendshttp:
+#   - address: '*'
+#     port: 80
+#     maxconn: 4000
+#   - address: '*'
+#     port: 8080
+#     maxconn: 4000
+
+
+backend:
+  name: my-backends
+  cookie:
+    name: '{{ ansible_fqdn }}_ha'
+    maxidle: 100m
+  default_server_settings:
+    - inter: 3s
+    - fastinter: 1s
+    - downinter: 10s
+    - fall: 3
+    - rise: 2
+  servers:
+    - peername: name1
+      address: address_to_service
+      port: 80
+      weight: 1
+      maxconn: 512
+      cookie: value_name1
+
+# stats:
+#   # address: '*'
+#   port: 9000
+#   uri: '/haproxy?stats'
+#   realm: 'Auth\ Access'
+#   auth:
+#     - user: 'fobar'
+#       pass: 'foopass'
+#   admin: no

@@ -1,0 +1,12 @@
+---
+# tasks file for haproxy-sticky-load-balancer
+
+- setup: gather_subset=!all,!any,min
+  when: (ansible_distribution is not defined) or (ansible_distribution_release is not defined)
+
+- include_tasks: "{{ distrotasks }}"
+  with_first_found:
+    - "haproxy-{{ ansible_distribution | lower }}-{{ ansible_distribution_release }}.yml"
+    - "haproxy-default.yml"
+  loop_control:
+    loop_var: distrotasks

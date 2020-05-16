@@ -1,0 +1,4 @@
+---
+
+- fail:
+    msg: "this role has not been ported to your target ({{ ansible_distribution }}-{{ ansible_distribution_release }})"
