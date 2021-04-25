@@ -1,0 +1,41 @@
+---
+
+- name: directories for pre, post, renew hooks
+  ansible.builtin.file:
+    path: '{{ dir }}'
+    state: directory
+    mode: u+rwx,g+rx,o+rx
+  with_items:
+    - /etc/letsencrypt/renewal-hooks/deploy
+    - /etc/letsencrypt/renewal-hooks/post
+    - /etc/letsencrypt/renewal-hooks/pre
+  loop_control:
+    loop_var: dir
+
+- name: pre_hook installation
+  ansible.builtin.copy:
+    src: pre_hook.sh
+    dest: '/etc/letsencrypt/renewal-hooks/pre/{{ certbot.domain }}.sh'
+    mode: u+rwx,g-x,o-x
+  register: pre_hook
+
+- name: post_hook installation
+  ansible.builtin.copy:
+    src: post_hook.sh
+    dest: '/etc/letsencrypt/renewal-hooks/post/{{ certbot.domain }}.sh'
+    mode: u+rwx,g-x,o-x
+  register: post_hook
+
+- name: transfer deploy hook script
+  ansible.builtin.template:
+    src: deploy-hook.sh
+    dest: '/etc/letsencrypt/renewal-hooks/deploy/{{ certbot.domain }}.sh'
+    mode: u+rwx,g-wx,o-x
+  register: deploy_hook
+
+- name: exec certbot renew --cert-name {{ certbot.domain }}
+  ansible.builtin.command: 'certbot renew -q --cert-name {{ certbot.domain }} {% if certbot.testcert | default(default_certbot_testcert) | bool %} --test-cert {% endif %}'
+  args:
+    creates: '/etc/letsencrypt/live/{{ certbot.domain }}/'
+  ignore_errors: yes
+  register: certbot_renew

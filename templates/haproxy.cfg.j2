@@ -1,7 +1,7 @@
 global
     # TODO rehacer política de logs,
     #  expulsar logs por red
-    #  implenetar en el depósito de logs un analizador
+    #  implementar en el depósito de logs un analizador
     log /dev/log    local0
     log /dev/log    local1 notice
     # log 127.0.0.1 local0
@@ -25,6 +25,8 @@ global
     ssl-default-bind-ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384
     ssl-default-bind-ciphersuites TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256
     ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+    # preventing "unable to load default 1024 bits DH parameter for certificate"
+    tune.ssl.default-dh-param 2048
 
 # A "defaults" section sets default parameters for all other sections following its declaration.
 defaults
@@ -82,9 +84,9 @@ defaults
 # A "frontend" section describes a set of listening sockets accepting client
 # connections.
 
-{% for f in frontendshttp | default([{'port': '80'}]) %}
-frontend http-in-{{ f.port }}
-    bind {{ f.address | default('*') }}:{{ f.port }}
+{% for f in frontendshttp %}
+frontend http-in-{{ f.address | default(default_frontend_address) | regex_replace('\*','STAR') | regex_replace('([^a-zA-Z0-9.])', 'X') }}-{{ f.port | default (default_frontend_port) }}
+    bind {{ f.address | default(default_frontend_address) }}:{{ f.port | default (default_frontend_port) }}
     default_backend {{ backend.name }}
     option httplog
 
@@ -102,18 +104,32 @@ frontend http-in-{{ f.port }}
     # ignore-persist
 
     # duplicamos la cantidad máxima de conexiones, default 2000
-    maxconn {{ f.maxconn | default('4000') }}
+    maxconn {{ f.maxconn | default(default_frontend_maxconn) }}
     # The maxconn parameter specifies the maximum number of concurrent
     #  connections for the service.
     #  By default, the maximum is 2000.
     # Proxies will stop accepting connections when this limit is reached.
 
+{% if (certbot != False) and (f.port | default (default_frontend_port) | string == '80') %}
+    # Let's encrypt is going to ask this URI
+    acl le-http-challenge path_beg /.well-known/acme-challenge/
+    use_backend letsencrypt if le-http-challenge
+
+backend letsencrypt
+    # this backend starts disabled in order to avoid the syn-ack timers waiting
+    #  for a non existing server.
+    # For enabling the challenging use the web admin or the socket interface
+    # echo "set server letsencrypt/certbot state ready" | socat /run/haproxy/admin.sock
+    server certbot 127.0.0.1:{{ certbot.http01_port | default(default_certbot_http01_port)}} disabled
+
+{% endif %}
 {% endfor %}
 
-{% if fronthttps is defined %}
-frontend https-in
+
+{% for f in frontendshttps %}
+frontend https-in-{{ f.address | default(default_frontendhttps_address) | regex_replace('\*','STAR') | regex_replace('([^a-zA-Z0-9.])', 'X') }}-{{ f.port | default (default_frontendhttps_port) }}
     # cat /etc/ssl/private/ssl-cert-snakeoil.key /etc/ssl/certs/ssl-cert-snakeoil.pem  > testcert.pem
-    bind *:443 ssl crt /etc/haproxy/testcert.crt
+    bind {{ f.address | default(default_frontendhttps_address) }}:{{ f.port | default (default_frontendhttps_port) }} ssl crt {{ f.crtdir | default(default_frontendhttps_crtdir) }}/{{ f.crtfile | default(default_frontendhttps_crtfile) }}
     default_backend {{ backend.name }}
 
     # para checks
@@ -123,7 +139,20 @@ frontend https-in
     # para checks
     monitor-uri /haproxy?status
 
+    # duplicamos la cantidad máxima de conexiones, default 2000
+    maxconn {{ f.maxconn | default(default_frontendhttps_maxconn) }}
+    # The maxconn parameter specifies the maximum number of concurrent
+    #  connections for the service.
+    #  By default, the maximum is 2000.
+    # Proxies will stop accepting connections when this limit is reached.
+
+{% if (certbot != False) and (f.port | default (default_frontend_port) | string == '443') %}
+    # Let's encrypt is going to ask this URI
+    acl le-http-challenge path_beg /.well-known/acme-challenge/
+    use_backend letsencrypt if le-http-challenge
+
 {% endif %}
+{% endfor %}
 
 # A "backend" section describes a set of servers to which the proxy will connect
 # to forward incoming connections.
@@ -144,12 +173,17 @@ backend {{ backend.name }}
     # el timestamp periodicamente
     # http://cbonte.github.io/haproxy-dconv/1.7/configuration.html#4.2-cookie
     cookie {{ backend.cookie.name }} insert nocache maxidle {{ backend.cookie.maxidle }}
+    # cookie WEBSVR insert nocache maxidle 100m httponly domain 192.168.0.18 attr "SameSite=Strict"
 
     # ajustes para política de cada backend server (detalles abajo)
-{% if backend.default_server_settings is defined %}    default-server {% for set in backend.default_server_settings %}{{ lookup('dict', set).key }} {{ lookup('dict', set).value }} {% endfor -%}{% endif %}
+{% if backend.default_server_settings | default(default_default_server_settings) is not false %}
+    default-server {% for set in backend.default_server_settings | default(default_default_server_settings) %}{{ lookup('dict', set).key }} {{ lookup('dict', set).value }} {% endfor %}
+{% endif %}
 
 
-{% for s in backend.servers %}    server  {{ s.peername }} {{ s.address }}:{{ s.port | default('80') }} weight {{ s.weight | default('1') }} maxconn {{ s.maxconn | default('512') }} cookie {{ s.cookie }} check
+{% for name, s in ( backend.servers | default({}) ).items() %}    server  {{ name }} {{ s.address | default(name) }}:{{ s.port | default(default_server.port) }} weight {{ s.weight | default(default_server.weight) }}
+{%- if s.maxconn is defined %} maxconn {{ s.maxconn | default('512') }}{% endif %}
+ cookie {{ s.cookie | default( (name + '-' + (s.address | default(name)) ) | hash('sha1') ) }} check
 {% endfor %}
 
     # la siguiente es información relativa a los checks para validar el
@@ -176,20 +210,19 @@ backend {{ backend.name }}
     # if the server is considered healthy (rise 4),
     # and the number of times a server consecutively fails a
     # check before it is considered failed (fall 3).
-{% if stats is defined %}
 
-# Estadísticas web.
-# Si bien se reinician cuando se reincia el servicio son útiles.
-listen stats
-    bind {{ stats.address | default('127.0.0.1') }}:{{ stats.port | default('9000') }}
+{% for s in stats %}
+listen stats-{{ s.address | default(default_stats_address) | regex_replace('\*','STAR') | regex_replace('([^a-zA-Z0-9.])', 'X') }}-{{ s.port | default(default_stats_port) }}
+    bind {{ s.address | default(default_stats_address) }}:{{ s.port | default(default_stats_port) }}
     # para checks
     monitor-uri /haproxy?status
     stats enable
-    stats uri {{ stats.uri | default ('/haproxy?stats') }}
-    stats realm {{ stats.realm | default('Auth\ Access')  }}
-    {% for i in stats.auth | default([ { 'user': 'fobar', 'pass': 'foopass'}, ])  %}stats auth {{ i.user }}:{{ i.pass }}
+    stats uri {{ s.uri | default (default_stats_uri) }}
+    stats realm {{ s.realm | default(default_stats_realm)  }}
+{% for i in s.auth | default(default_stats_auth) %}
+    stats auth {{ i.user }}:{{ i.pass }}
 {% endfor %}
-{% if stats.admin | default(False) %}
+{% if s.admin | default(default_stats_admin) %}
     # Este admin permite dar de baja backends y otras operaciones
     stats admin if TRUE{% endif %}
-{% endif %}
+{% endfor %}

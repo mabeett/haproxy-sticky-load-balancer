@@ -1,0 +1,32 @@
+---
+
+
+- name: install ssl-cert package
+  apt:
+    name: ssl-cert
+    state: present
+
+- name: destination directory for ssl cert
+  ansible.builtin.file:
+    name: '{{ frontendshttps[0].crtdir | default(default_frontendhttps_crtdir) }}'
+    state: directory
+    mode: '0755'
+
+- name: generate fake ssl certificate for haproxy 1
+  ansible.builtin.slurp:
+    src: /etc/ssl/private/ssl-cert-snakeoil.key
+  register: key
+  no_log: true
+- name: generate fake ssl certificate for haproxy 2
+  ansible.builtin.slurp:
+    src: /etc/ssl/certs/ssl-cert-snakeoil.pem
+  register: pem
+  no_log: true
+- name: generate fake ssl certificate for haproxy 3
+  ansible.builtin.template:
+    src: testcert.j2
+    dest: '{{ f.crtdir | default(default_frontendhttps_crtdir) }}/{{ f.crtfile | default(default_frontendhttps_crtfile) }}'
+  with_items: "{{ frontendshttps }}"
+  loop_control:
+    loop_var: f
+  no_log: true

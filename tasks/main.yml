@@ -4,9 +4,41 @@
 - setup: gather_subset=!all,!any,min
   when: (ansible_distribution is not defined) or (ansible_distribution_release is not defined)
 
-- include_tasks: "{{ distrotasks }}"
+# install required packages
+- include_tasks: "{{ pkgs }}"
   with_first_found:
-    - "haproxy-{{ ansible_distribution | lower }}-{{ ansible_distribution_release }}.yml"
+    - "packages-{{ ansible_distribution | lower }}-{{ ansible_distribution_release | lower }}.yml"
+    - "packages-default.yml"
+  loop_control:
+    loop_var: pkgs
+
+- include_tasks: "{{ distro_certbot_renew }}"
+  with_first_found:
+    - "certbot_hooks_renew-{{ ansible_distribution | lower }}-{{ ansible_distribution_release | lower }}.yml"
+    - "certbot_hooks_renew-default.yml"
+  loop_control:
+    loop_var: distro_certbot_renew
+  when: frontendshttps | length > 0 and certbot | default(default_certbot) != False
+
+- include_tasks: "{{ distro_selfcert }}"
+  with_first_found:
+    - "selfcert_haproxy-{{ ansible_distribution | lower }}-{{ ansible_distribution_release | lower }}.yml"
+    - "selfcert_haproxy-default.yml"
+  loop_control:
+    loop_var: distro_selfcert
+  when: (frontendshttps | length > 0 ) and (certbot_renew.rc | default(0) != 0 or certbot | default(default_certbot) == False)
+
+- include_tasks: "{{ distro_haproxy }}"
+  with_first_found:
+    - "haproxy-{{ ansible_distribution | lower }}-{{ ansible_distribution_release | lower }}.yml"
     - "haproxy-default.yml"
   loop_control:
-    loop_var: distrotasks
+    loop_var: distro_haproxy
+
+- include_tasks: "{{ distro_certbot_certcreation }}"
+  with_first_found:
+    - "certbot_certcreation-{{ ansible_distribution | lower }}-{{ ansible_distribution_release | lower }}.yml"
+    - "certbot_certcreation-default.yml"
+  loop_control:
+    loop_var: distro_certbot_certcreation
+  when: frontendshttps | length > 0 and certbot | default(default_certbot) != False and (pre_hook.changed or post_hook.changed or deploy_hook.changed)
