@@ -110,12 +110,26 @@ frontend http-in-{{ f.address | default(default_frontend_address) | regex_replac
     #  By default, the maximum is 2000.
     # Proxies will stop accepting connections when this limit is reached.
 
+{% if (certbot != False) and (f.port | default (default_frontend_port) | string == '80') %}
+    # Let's encrypt is going to ask this URI
+    acl le-http-challenge path_beg /.well-known/acme-challenge/
+    use_backend letsencrypt if le-http-challenge
+
+backend letsencrypt
+    # this backend starts disabled in order to avoid the syn-ack timers waiting
+    #  for a non existing server.
+    # For enabling the challenging use the web admin or the socket interface
+    # echo "set server letsencrypt/certbot state ready" | socat /run/haproxy/admin.sock
+    server certbot 127.0.0.1:{{ certbot.http01_port | default(default_certbot_http01_port)}} disabled
+
+{% endif %}
 {% endfor %}
+
 
 {% for f in frontendshttps %}
 frontend https-in-{{ f.address | default(default_frontendhttps_address) | regex_replace('\*','STAR') | regex_replace('([^a-zA-Z0-9.])', 'X') }}-{{ f.port | default (default_frontendhttps_port) }}
     # cat /etc/ssl/private/ssl-cert-snakeoil.key /etc/ssl/certs/ssl-cert-snakeoil.pem  > testcert.pem
-    bind {{ f.address | default(default_frontendhttps_address) }}:{{ f.port | default (default_frontendhttps_port) }} ssl crt {{ f.crtfile | default(default_frontendhttps_crtfile) }}
+    bind {{ f.address | default(default_frontendhttps_address) }}:{{ f.port | default (default_frontendhttps_port) }} ssl crt {{ f.crtdir | default(default_frontendhttps_crtdir) }}/{{ f.crtfile | default(default_frontendhttps_crtfile) }}
     default_backend {{ backend.name }}
 
     # para checks
@@ -132,6 +146,12 @@ frontend https-in-{{ f.address | default(default_frontendhttps_address) | regex_
     #  By default, the maximum is 2000.
     # Proxies will stop accepting connections when this limit is reached.
 
+{% if (certbot != False) and (f.port | default (default_frontend_port) | string == '443') %}
+    # Let's encrypt is going to ask this URI
+    acl le-http-challenge path_beg /.well-known/acme-challenge/
+    use_backend letsencrypt if le-http-challenge
+
+{% endif %}
 {% endfor %}
 
 # A "backend" section describes a set of servers to which the proxy will connect

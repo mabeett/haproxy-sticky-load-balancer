@@ -1,0 +1,15 @@
+---
+
+- name: install haproxy package
+  apt:
+    name: haproxy
+    state: present
+    update_cache: yes
+
+- name: install certbot
+  apt:
+    name:
+      - certbot
+      - socat
+    state: present
+  when:  certbot | default(default_certbot) != False

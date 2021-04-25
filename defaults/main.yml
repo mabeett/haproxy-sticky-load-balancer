@@ -14,17 +14,28 @@ default_frontend_address: '*'
 default_frontend_port: 80
 default_frontend_maxconn: 4000
 
-# frontendshttps: []
+frontendshttps: []
 # frontendshttps:
 #   - address: '*'
 #     port: 443
 #     maxconn: 4000
+#     cerbot: yes
+#     crtdir: /etc/haproxy
 #     crtfile: /etc/haproxy/testcert.crt
 ## default values for frontendshttps elements
 default_frontendhttps_address: '*'
 default_frontendhttps_port: 443
 default_frontendhttps_maxconn: 4000
-default_frontendhttps_crtfile: /etc/haproxy/star_cert.crt
+default_frontendhttps_crtdir: /etc/haproxy
+default_frontendhttps_crtfile: testcert.crt
+
+# certbot:
+#   http01_port: 8888
+#   domain: hproxy.tmp.matiaspecchia.site
+#   testcert: no
+default_certbot: yes
+default_certbot_http01_port: 8888
+default_certbot_testcert: no
 
 backend:
   name: my-backends

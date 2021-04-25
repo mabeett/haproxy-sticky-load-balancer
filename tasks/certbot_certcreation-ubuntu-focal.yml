@@ -1,0 +1,19 @@
+---
+
+- name: exec certbot certonly
+  #ansible.builtin.command: 'certbot certonly --non-interactive --agree-tos -d "{{ certbot.domain }}" {% if certbot.email is defined %}--email="{{ certbot.email }}" --eff-email {% endif %} --standalone --http-01-port "{{ certbot.http01_port | default(default_certbot_http01_port)}}"  --http-01-address "127.0.0.1" --disable-hook-validation --pre-hook "echo set server letsencrypt/certbot state ready | socat /run/haproxy/admin.sock -" --deploy-hook "{{ deploy_hook.dest }}" --post-hook "systemctl restart haproxy" {% if certbot.testcert | default(default_certbot_testcert) | bool %} --test-cert {% endif %}'
+  ansible.builtin.shell: '{{ shitem }}'
+  with_items:
+    - '/etc/letsencrypt/renewal-hooks/pre/{{ certbot.domain }}.sh'
+    - 'certbot certonly --non-interactive --agree-tos -d "{{ certbot.domain }}" {% if certbot.email is defined %}--email="{{ certbot.email }}" --eff-email {% endif %} --standalone --http-01-port "{{ certbot.http01_port | default(default_certbot_http01_port)}}" --http-01-address "127.0.0.1" --disable-hook-validation {% if certbot.testcert | default(default_certbot_testcert) | bool %} --test-cert {% endif %}'
+    - 'RENEWED_DOMAINS="{{ certbot.domain }}" RENEWED_LINEAGE="/etc/letsencrypt/live/{{ certbot.domain }}" /etc/letsencrypt/renewal-hooks/deploy/{{ certbot.domain }}.sh'
+    - '/etc/letsencrypt/renewal-hooks/post/{{ certbot.domain }}.sh'
+  loop_control:
+    loop_var: shitem
+
+- name: enable systemctl certbot timer
+  ansible.builtin.systemd:
+    name: certbot.timer
+    state: started
+    enabled: yes
+    masked: no
