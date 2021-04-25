@@ -172,7 +172,7 @@ backend {{ backend.name }}
     # maxidle se usa para hacer caducar la cookie, se renuev
     # el timestamp periodicamente
     # http://cbonte.github.io/haproxy-dconv/1.7/configuration.html#4.2-cookie
-    cookie {{ backend.cookie.name }} insert nocache maxidle {{ backend.cookie.maxidle }}
+    cookie {{ backend.cookie.name }} insert nocache maxidle {{ backend.cookie.maxidle }} httponly attr "SameSite=Strict"
     # cookie WEBSVR insert nocache maxidle 100m httponly domain 192.168.0.18 attr "SameSite=Strict"
 
     # ajustes para política de cada backend server (detalles abajo)
